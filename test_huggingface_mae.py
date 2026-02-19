@@ -1,17 +1,15 @@
 import pytest
 import torch
 
+pytestmark = pytest.mark.integration
+
+huggingface_modelpath = "recursionpharma/OpenPhenom"
 from huggingface_mae import MAEModel
 
-huggingface_openphenom_model_dir = "."
-# huggingface_modelpath = "recursionpharma/OpenPhenom"
-
-
-@pytest.fixture
+@pytest.fixture(scope="session")
 def huggingface_model():
-    # Make sure you have the model/config downloaded from https://huggingface.co/recursionpharma/OpenPhenom to this directory
-    # huggingface-cli download recursionpharma/OpenPhenom --local-dir=.
-    huggingface_model = MAEModel.from_pretrained(huggingface_openphenom_model_dir)
+    # This step downloads the model to a local cache, takes a bit to run
+    huggingface_model = MAEModel.from_pretrained(huggingface_modelpath)
     huggingface_model.eval()
     return huggingface_model
 
