@@ -1,9 +1,14 @@
+from pathlib import Path
 from typing import Dict, Tuple, Union
+import zipfile
 
 import torch
 import torch.nn as nn
 
 from transformers import PretrainedConfig, PreTrainedModel
+from huggingface_hub import hf_hub_download
+from safetensors.torch import load_file as safe_load_file
+from safetensors import SafetensorError
 
 from loss import FourierLoss
 from normalizer import Normalizer
@@ -14,6 +19,7 @@ from vit import (
     sincos_positional_encoding_vit,
     vit_small_patch16_256,
 )
+
 
 TensorDict = Dict[str, torch.Tensor]
 
@@ -285,9 +291,36 @@ class MAEModel(PreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         filename = kwargs.pop("filename", "model.safetensors")
 
-        modelpath = f"{pretrained_model_name_or_path}/{filename}"
         config = MAEConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        state_dict = torch.load(modelpath, map_location="cpu")
+
+        # Always download from Hub when given a repo_id, otherwise treat as local path
+        if "/" in pretrained_model_name_or_path and not Path(pretrained_model_name_or_path).exists():
+            modelpath = hf_hub_download(
+                repo_id=pretrained_model_name_or_path,
+                filename=filename,
+                force_download=False,
+            )
+        else:
+            modelpath = str(Path(pretrained_model_name_or_path) / filename)
+
+        # Load weights
+        if zipfile.is_zipfile(modelpath):
+            state = torch.load(modelpath, map_location="cpu")
+        else:
+            state = None
+            if filename.endswith(".safetensors"):
+                try:
+                    state = safe_load_file(modelpath, device="cpu")
+                except Exception:
+                    state = torch.load(modelpath, map_location="cpu")
+            else:
+                state = torch.load(modelpath, map_location="cpu")
+
         model = cls(config)
-        model.load_state_dict(state_dict["state_dict"])
+
+        sd = state["state_dict"] if isinstance(state, dict) and "state_dict" in state else state
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        if missing or unexpected:
+            print(f"[mae] load_state_dict: missing={len(missing)} unexpected={len(unexpected)}")
+
         return model
