@@ -1,0 +1,3 @@
+- This fork exists to support cpqc embedding job
+- Pinned SHA used in container
+- Fixed HF download + zip fallback
